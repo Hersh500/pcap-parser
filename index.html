@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>PCAP Parser by Hersh500</title>
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script src="javascripts/respond.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!--[if lt IE 8]>
+    <link rel="stylesheet" href="stylesheets/ie.css">
+    <![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+  </head>
+  <body>
+      <div id="header">
+        <nav>
+          <li class="fork"><a href="https://github.com/Hersh500/pcap-parser">View On GitHub</a></li>
+          <li class="downloads"><a href="https://github.com/Hersh500/pcap-parser/zipball/master">ZIP</a></li>
+          <li class="downloads"><a href="https://github.com/Hersh500/pcap-parser/tarball/master">TAR</a></li>
+          <li class="title">DOWNLOADS</li>
+        </nav>
+      </div><!-- end header -->
+
+    <div class="wrapper">
+
+      <section>
+        <div id="title">
+          <h1>PCAP Parser</h1>
+          <p>Parse PCAP files and visualize network data </p>
+          <hr>
+          <span class="credits left">Project maintained by <a href="https://github.com/Hersh500">Hersh500</a></span>
+          <span class="credits right">Hosted on GitHub Pages &mdash; Theme by <a href="https://twitter.com/michigangraham">mattgraham</a></span>
+        </div>
+
+        <h2>
+<a id="an-open-source-r-package-to-parse-through-packet-capture-files-and-display-graphs" class="anchor" href="#an-open-source-r-package-to-parse-through-packet-capture-files-and-display-graphs" aria-hidden="true"><span class="octicon octicon-link"></span></a>An Open-Source R Package to Parse through Packet Capture Files and Display Graphs</h2>
+
+<p>Use Wireshark or another packet sniffing utility to capture IP traffic data, and use PCAP Parser to analyze traffic. </p>
+
+<h2>
+<a id="how-it-works" class="anchor" href="#how-it-works" aria-hidden="true"><span class="octicon octicon-link"></span></a>How it Works</h2>
+
+<p>Packet Capture Files in the libpcap format store data in this order: </p>
+
+<p></p>
+
+<p>PCAP Parser follows this format to gather relevant information about where data originates from and where it goes. This information is provided in the packet capture file in the IPv4 Header. </p>
+
+<div class="highlight highlight-c"><pre><span class="pl-st">struct</span> ipv4_hdr_s {
+    uint8 vers_hdrlen;
+    uint8 dscp_ecn;
+    uint16 total_len;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint16 identification;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint16 flags_frag_ofs;        <span class="pl-c">/* NETWORK ORDER */</span>
+    uint8 ttl;
+    uint8 proto; 
+    uint16 hdr_checksum;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint32 src_ip;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint32 dst_ip;         <span class="pl-c">/* NETWORK ORDER */</span>
+};</pre></div>
+
+<p>The "Proto" flag describes the protocol (TCP/UDP/ICMP) of the packet. Based on this, the following data in the packet is copied to a TCP/UDP/ICMP header structure, using the copy_bytes function: </p>
+
+<div class="highlight highlight-c"><pre><span class="pl-st">void</span> <span class="pl-en">copy_bytes</span> (<span class="pl-st">void</span> *_from, <span class="pl-st">void</span> *_to, <span class="pl-st">int</span> num)
+{
+    <span class="pl-st">int</span> i;
+    uint8 *from = (uint8 *)_from;
+    uint8 *to = (uint8 *)_to;
+
+    <span class="pl-k">for</span> (i = <span class="pl-c1">0</span>; i &lt; num; i++) {
+        to[i] = from[i];
+    }
+#<span class="pl-k">if</span> <span class="pl-c1">0</span><span class="pl-c"></span>
+<span class="pl-c">    while (i &lt; num) </span>
+<span class="pl-c">        *to = *from;</span>
+<span class="pl-c">        to = to + 1;</span>
+<span class="pl-c">        from = from + 1;</span>
+<span class="pl-c">    i++;</span>
+<span class="pl-c"></span>#<span class="pl-k">endif</span>
+}</pre></div>
+
+<p>The structure of the TCP Header is as follows: </p>
+
+<div class="highlight highlight-c"><pre><span class="pl-st">struct</span> tcp_hdr_s {
+    uint16 src_port;        <span class="pl-c">/* NETWORK ORDER */</span>
+    uint16 dst_port;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint32 seq_num;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint32 ack_num;        <span class="pl-c">/* NETWORK ORDER */</span>
+    uint16 ofs_ctrl;        <span class="pl-c">/* NETWORK ORDER */</span>        
+    uint16 window_size;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint16 checksum;         <span class="pl-c">/* NETWORK ORDER */</span>
+    uint16 urgent_pointer;         <span class="pl-c">/* NETWORK ORDER */</span>
+};</pre></div>
+
+<p>TCP Packets exchanged (syn, syn+ack...fin) between two machines are tracked by a linked list of Flows. The Linked List structure: </p>
+
+<div class="highlight highlight-c"><pre><span class="pl-st">struct</span> flow_s {
+    uint32 flow_id;
+    uint32 src_ip; 
+    uint32 dst_ip; 
+    uint16 src_port; 
+    uint16 dst_port; 
+    uint32 num_pkts;
+    uint32 seq_num; 
+    uint8 is_open;
+    uint32 num_bytes1; <span class="pl-c">/* from initiator */</span>
+    uint32 num_bytes2; <span class="pl-c">/* from responder */</span>
+    uint32 start_time; <span class="pl-c">/* first syn */</span>
+    uint32 end_time; <span class="pl-c">/* fin_ack or ack */</span>
+    uint8 closed; 
+    uint32 num_init_pkts;
+    uint32 num_resp_pkts;
+    uint32 src_timestamps [MAX_NUM_PACKETS]; <span class="pl-c">/* timestamps on pkts from initiator i.e. who sent first syn */</span>
+    uint32 dst_timestamps [MAX_NUM_PACKETS]; <span class="pl-c">/* timestamps on pkts from responder */</span>
+    uint32 src_seq_nums [MAX_NUM_PACKETS];
+    uint32 src_ack_nums [MAX_NUM_PACKETS];
+    uint32 dst_seq_nums [MAX_NUM_PACKETS];
+    uint32 dst_ack_nums [MAX_NUM_PACKETS];
+    uint32 packets [MAX_NUM_PACKETS];
+    <span class="pl-st">struct</span> flow_s *next;
+};</pre></div>
+
+<p>Each flow is closed after the fin packet is sent. This way, a linked list of flows is assembled for the R module to visualize. </p>
+
+<h3>
+<a id="network-order" class="anchor" href="#network-order" aria-hidden="true"><span class="octicon octicon-link"></span></a>Network Order</h3>
+
+<p>Read about Endianness <a href="http://www.cs.umd.edu/class/sum2003/cmsc311/Notes/Data/endian.html">here</a>  </p>
+
+<p>Certain values in the IP Header code are commented "Network Order". These values are stored in Big-Endian format, and thus need to be converted to Little-Endian format, which is how multi-byte values are stored on Intel x86 systems. This is done for integers with the following function: </p>
+
+<div class="highlight highlight-c"><pre><span class="pl-st">unsigned</span> <span class="pl-st">int</span> <span class="pl-en">_int_switcher</span>(<span class="pl-st">unsigned</span> <span class="pl-st">int</span> *x)
+{
+    <span class="pl-st">char</span> *b1;
+    <span class="pl-st">char</span> temp;
+
+    b1 = (<span class="pl-st">char</span> *) x;
+    temp = *b1;
+    *b1 = *(b1+<span class="pl-c1">3</span>);
+    *(b1+<span class="pl-c1">3</span>) = temp;
+
+    temp = *(b1+<span class="pl-c1">1</span>);
+    *(b1+<span class="pl-c1">1</span>) = *(b1+<span class="pl-c1">2</span>);
+    *(b1+<span class="pl-c1">2</span>) = temp;
+    <span class="pl-k">return</span> (*x);
+}</pre></div>
+
+<h3>
+<a id="definitions" class="anchor" href="#definitions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Definitions</h3>
+
+<div class="highlight highlight-c"><pre><span class="pl-st">typedef</span> <span class="pl-st">unsigned</span> <span class="pl-st">int</span> uint32;
+<span class="pl-st">typedef</span> <span class="pl-st">unsigned</span> <span class="pl-st">short</span> uint16;
+<span class="pl-st">typedef</span> <span class="pl-st">signed</span> <span class="pl-st">int</span> int32;
+<span class="pl-st">typedef</span> <span class="pl-st">unsigned</span> <span class="pl-st">char</span> uint8;
+<span class="pl-st">typedef</span> <span class="pl-st">unsigned</span> <span class="pl-st">char</span> <span class="pl-s3">mac_addr_t</span> [<span class="pl-c1">6</span>]; </pre></div>
+
+<h2>
+<a id="visualization" class="anchor" href="#visualization" aria-hidden="true"><span class="octicon octicon-link"></span></a>Visualization</h2>
+
+<p>The R visualization package is still in progress. To maximize readability, the <a href="http://www.r-bloggers.com/arc-diagrams-in-r-les-miserables/">ArcDiagrams R Package</a> will be used to visualize various flows. The data is exchanged between the R program and parser is done through function calls of C from the R package. For example, this function creates a flow table: </p>
+
+<div class="highlight highlight-r"><pre><span class="pl-en">get_flow_table</span> <span class="pl-k">&lt;-</span> <span class="pl-k">function</span> () {
+    <span class="pl-vo">src_ips</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_src_ipaddr_vector<span class="pl-pds">"</span></span>)
+    <span class="pl-vo">dst_ips</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_dst_ipaddr_vector<span class="pl-pds">"</span></span>)
+    <span class="pl-vo">src_ports</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_src_port_vector<span class="pl-pds">"</span></span>)
+    <span class="pl-vo">dst_ports</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_dst_port_vector<span class="pl-pds">"</span></span>)
+    <span class="pl-vo">start_time</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_start_time_vector<span class="pl-pds">"</span></span>)
+    <span class="pl-vo">flow_id</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_flow_id_vector<span class="pl-pds">"</span></span>)
+
+    <span class="pl-vo">flow_table</span> <span class="pl-k">&lt;-</span> <span class="pl-st">data.frame</span> (<span class="pl-v">SrcIP</span> <span class="pl-k">=</span> <span class="pl-vo">src_ips</span>, <span class="pl-v">DstIP</span> <span class="pl-k">=</span> <span class="pl-vo">dst_ips</span>, <span class="pl-v">SrcPort</span> <span class="pl-k">=</span> <span class="pl-vo">src_ports</span>, <span class="pl-v">DstPorts</span> <span class="pl-k">=</span> <span class="pl-vo">dst_ports</span>, 
+                                    <span class="pl-v">StartTime</span> <span class="pl-k">=</span> <span class="pl-vo">start_time</span>, <span class="pl-v">FlowId</span> <span class="pl-k">=</span> <span class="pl-vo">flow_id</span>)
+    <span class="pl-k">return</span>(<span class="pl-vo">flow_table</span>)
+}</pre></div>
+
+<h2>
+<a id="in-progress" class="anchor" href="#in-progress" aria-hidden="true"><span class="octicon octicon-link"></span></a>In Progress</h2>
+
+<ul>
+<li>GeoIP Support: Based on the IP Address, the parser will assemble a table of locations. The goal of this is to show connections on a world map. </li>
+<li>Company Identification Based on MAC Addr. </li>
+<li>Visualization </li>
+<li>IPv6, UDP, ICMP Support </li>
+</ul>
+      </section>
+
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
