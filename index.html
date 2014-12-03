@@ -163,7 +163,7 @@
 <h2>
 <a id="visualization" class="anchor" href="#visualization" aria-hidden="true"><span class="octicon octicon-link"></span></a>Visualization</h2>
 
-<p>The R visualization package is still in progress. To maximize readability, the <a href="http://www.r-bloggers.com/arc-diagrams-in-r-les-miserables/">ArcDiagrams R Package</a> will be used to visualize various flows. The data is exchanged between the R program and parser is done through function calls of C from the R package. For example, this function creates a flow table: </p>
+<p>The R visualization package is still in progress. To maximize readability, the <a href="http://www.r-bloggers.com/arc-diagrams-in-r-les-miserables/">ArcDiagrams R Package</a> will be used to visualize various flows. The data is exchanged between the R program and parser through function calls from the R package. For example, this function creates a flow table: </p>
 
 <div class="highlight highlight-r"><pre><span class="pl-en">get_flow_table</span> <span class="pl-k">&lt;-</span> <span class="pl-k">function</span> () {
     <span class="pl-vo">src_ips</span> <span class="pl-k">&lt;-</span> .Call(<span class="pl-s1"><span class="pl-pds">"</span>get_src_ipaddr_vector<span class="pl-pds">"</span></span>)
