@@ -1,6 +1,10 @@
-setwd("/Users/Hersh/Programming/Dell/pcap_parser")
+setwd("/Users/Hersh/Programming/pcap_parser")
 dyn.load("pcap_parser.so")
-.Call("read_pcap_file")
+
+read_pcap_file <- function (fname, debug) {
+       .Call ("read_pcap_file", fname, debug)
+       return (0)
+}
 
 get_flow_table <- function () {
 	src_ips <- .Call("get_src_ipaddr_vector")
@@ -10,7 +14,7 @@ get_flow_table <- function () {
 	start_time <- .Call("get_start_time_vector")
 	flow_id <- .Call("get_flow_id_vector")
 
-	flow_table <- data.frame (SrcIP = src_ips, DstIP = dst_ips, SrcPort = src_ports, DstPorts = dst_ports, 
+	flow_table <- data.frame (SrcIP = src_ips, DstIP = dst_ips, SrcPort = src_ports, DstPort = dst_ports, 
                                     StartTime = start_time, FlowId = flow_id)
 	return(flow_table)
 }
@@ -35,6 +39,6 @@ plot_flow_src_seq <- function (flow_info) {
 }
 
 get_spec_flow <- function (flow_table) {
-	flow <- flow_table[flow_table$FlowId == 366,]
+	flow <- flow_table[flow_table$FlowId == 366,] 
 	return(flow) 
 }
