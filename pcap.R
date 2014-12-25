@@ -1,4 +1,3 @@
-setwd("/Users/Hersh/Programming/pcap_parser")
 dyn.load("pcap_parser.so")
 
 read_pcap_file <- function (fname, debug) {
@@ -32,10 +31,20 @@ get_flow_info <- function (flow_id) {
 	return(flow_info)	
 }	
 
-plot_flow_src_seq <- function (flow_info) {
+plot_flow_initiator_seq <- function (flow_info) {
 	seq_nums <- (flow_info[flow_info$SrcSeqNums > 0,])$SrcSeqNums
 	timestamp <- (flow_info[flow_info$SrcTimeStamp > 0,])$SrcTimeStamp
-	plot(timestamp, seq_nums) 
+	src_seq_ts <- data.frame (seq_nums, timestamp)
+	src_seq_ts_clean <- src_seq_ts[src_seq_ts>0,]
+	plot(src_seq_ts_clean$timestamp, src_seq_ts_clean$seq_nums, type="o") 
+}
+
+plot_flow_responder_seq <- function (flow_info) {
+	seq_nums <- (flow_info[flow_info$DstSeqNums > 0,])$DstSeqNums
+	timestamp <- (flow_info[flow_info$DstTimeStamp > 0,])$DstTimeStamp
+	dst_seq_ts <- data.frame (seq_nums, timestamp)
+	dst_seq_ts_clean <- dst_seq_ts[dst_seq_ts>0,]
+	plot(dst_seq_ts_clean$timestamp, dst_seq_ts_clean$seq_nums, type="o") 
 }
 
 get_spec_flow <- function (flow_table) {
