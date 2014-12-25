@@ -25,14 +25,14 @@ Working on:
 Following assumes you have already installed R and have a .pcap file to test. I tested this with R-2.13.1.
 
 1. to install:
-    tar -xzvf pcap_r.tar.gz
+    tar -xzvf pcap-parser.tar.gz
 
 2. to compile:
-    cd pcap_r
+    cd pcap-parser
     R CMD SHLIB pcap_parser.c
 
 3. to run:
-    start R from pcap_r
+    start R from pcap-parser
     
     > source ("pcap.R")
     
