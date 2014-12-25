@@ -1,8 +1,7 @@
 What is working so far:
 
 I am able to parse simple pcap files and pass flow information to R.
-There are some tricky packet headers (with 802.1q VLAN and some other
-    stuff I don't know) I am not able to parse as yet.
+There are some tricky packet headers (such as 802.1q VLAN and others) I am not able to parse as yet.
 R Interface works as follows:
     read_pcap_file(filename, print_debug_info)
         This creates flow table which is available in C world.
@@ -16,14 +15,14 @@ R Interface works as follows:
         plot_flow_initiator_seq (flow)
     &   plot_flow_responder_seq (flow)
 
-    These plot timestamps on x-axis and tcp sequence num on y-axis for two
-    directions of the flow (initiator = side that sent first syn).
+These plot timestamps on x-axis and tcp sequence num on y-axis for two
+directions of the flow (initiator = side that sent first syn).
 
 Working on:
     Plot flows Src and Dst on Google Map based on Geo IP database lookup.
 
 
-Following assumes you have already installed R. I tested this with R-2.13.1.
+Following assumes you have already installed R and have a .pcap file to test. I tested this with R-2.13.1.
 
 1. to install:
     tar -xzvf pcap_r.tar.gz
@@ -37,10 +36,10 @@ Following assumes you have already installed R. I tested this with R-2.13.1.
     
     > source ("pcap.R")
     
-    > read_pcap_file ("test.pcap", 0)
+    > read_pcap_file ("filename.pcap", 0)
    
     > get_flow_table()
    
-    > flow <- get_flow_info (0)
+    > flow <- get_flow_info (Flow ID)
     
     > plot_flow_responder_seq (flow)
