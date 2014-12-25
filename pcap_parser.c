@@ -6,14 +6,19 @@
 #include <fcntl.h>
 #include <string.h>
 
+#define COMPILE_AS_R_LIB 1
+
+#if COMPILE_AS_R_LIB
 #include <R.h>
 #include <Rinternals.h>
 #include <Rmath.h>
+#endif
 
 typedef unsigned int uint32;
 typedef unsigned short uint16;
 typedef signed int int32;
 typedef unsigned char uint8;
+typedef unsigned long long uint64;
 typedef unsigned char mac_addr_t [6]; 
 
 #define MAX_HASH_LENGTH  131072 
@@ -126,8 +131,8 @@ struct flow_s {
 	uint8 closed; 
 	uint32 num_init_pkts;
 	uint32 num_resp_pkts;
-	uint32 src_timestamps [MAX_NUM_PACKETS]; /* timestamps on pkts from initiator i.e. who sent first syn */
-	uint32 dst_timestamps [MAX_NUM_PACKETS]; /* timestamps on pkts from responder */
+	uint64 src_timestamps [MAX_NUM_PACKETS]; /* timestamps on pkts from initiator i.e. who sent first syn */
+	uint64 dst_timestamps [MAX_NUM_PACKETS]; /* timestamps on pkts from responder */
 	uint32 src_seq_nums [MAX_NUM_PACKETS];
 	uint32 src_ack_nums [MAX_NUM_PACKETS];
 	uint32 dst_seq_nums [MAX_NUM_PACKETS];
@@ -151,6 +156,8 @@ struct ip_info_s *ip_infos = NULL;
 struct flow_s *list_of_flows = NULL;
 struct flow_s *table[MAX_HASH_LENGTH]; 
 struct counters cnt;
+
+void clear_state ();
 
 struct ip_info_s *
 find_ip (uint32 ip)
@@ -347,6 +354,7 @@ print_flows ()
 	}
 }
 
+// needs cleanup - different pcap files seem to have different timestamp resolution
 static void
 record_timestamp_and_seq_ack_nums (struct flow_s *flow, struct pcaprec_hdr_s *pkt_hdr, 
 							struct ipv4_hdr_s *ip_hdr, struct tcp_hdr_s *tcp_hdr)
@@ -356,14 +364,21 @@ record_timestamp_and_seq_ack_nums (struct flow_s *flow, struct pcaprec_hdr_s *pk
 		if ((tcp_hdr->ofs_ctrl & 0x10) == 0x10) {
 			flow->dst_ack_nums[flow->num_pkts] = tcp_hdr->ack_num; 
 		}
-		flow->dst_timestamps[flow->num_pkts] = pkt_hdr->ts_sec * 1000000 + pkt_hdr->ts_usec; 
+		flow->dst_timestamps[flow->num_pkts] = (((uint64)pkt_hdr->ts_sec) * 1000000LL) + (uint64)pkt_hdr->ts_usec;
 	}
 	else {
 		flow->src_seq_nums[flow->num_pkts] = tcp_hdr->seq_num; 
 		if ((tcp_hdr->ofs_ctrl & 0x10) == 0x10) {
 			flow->src_ack_nums[flow->num_pkts] = tcp_hdr->ack_num;
 		}
-		flow->src_timestamps[flow->num_pkts] = pkt_hdr->ts_sec * 1000000 + pkt_hdr->ts_usec; 
+		flow->src_timestamps[flow->num_pkts] = (uint64)pkt_hdr->ts_sec * 1000000; 
+		if (pkt_hdr->ts_usec > 1000000) {
+			/* possibly nanosecond pcap file */
+			flow->src_timestamps[flow->num_pkts] += (pkt_hdr->ts_usec/1000);
+		}
+		else {
+			flow->src_timestamps[flow->num_pkts] += pkt_hdr->ts_usec;
+        }
 	}
 }
 
@@ -447,7 +462,7 @@ search_hash_list (uint32 src_ip, uint32 dst_ip)
 
 
 static int 
-parse_pcap_file (char *file_name, int debug)
+parse_pcap_file (const char *file_name, int debug)
 {
 	
 	int n, rc, fd, size_of_data;
@@ -688,11 +703,50 @@ parse_pcap_file (char *file_name, int debug)
 }
 
 
-SEXP read_pcap_file (void)
+#if COMPILE_AS_R_LIB
+
+SEXP read_pcap_file (SEXP r_filename, SEXP r_debug)
 {
-	parse_pcap_file ("/Users/Hersh/Programming/Dell/pcap_parser/scp_transfer.pcap", 1);
-	//parse_pcap_file ("/Users/Hersh/Programming/Dell/pcap_parser/test2.pcap", 1);
+	const char *fname;
+	int debug_flag;
+		
+	clear_state();
+
+	fname = CHAR(STRING_ELT(r_filename, 0));
+	debug_flag = (int) REAL(r_debug)[0];
+
+	printf ("fname = %s, debug = %d\n", fname, debug_flag);
+	parse_pcap_file (fname, debug_flag);
 	return R_NilValue;
+}
+
+void clear_state ()
+{
+	int i;
+	struct flow_s *tmp; 
+	struct flow_s *save; 
+	for (i = 0; i < MAX_HASH_LENGTH; i++) {
+		tmp = table[i];
+		while (tmp) {
+			save = tmp->next;
+			free (tmp);
+			tmp = save; 
+		}
+		table[i] = NULL;
+	}
+	g_flow_id = 0;
+	num_ip_info_elements = 0;
+	
+	//CLEAN UP IP_INFOS	
+	struct ip_info_s *tmp1, *save1;
+	tmp1 = ip_infos;		
+	while (tmp1) {
+		save1 = tmp1->next;
+		free (tmp1);			
+		tmp1  = save1; 
+	}
+	ip_infos = NULL;
+	memset (&cnt, 0, sizeof(cnt));
 }
 
 SEXP get_ipaddr_vector (void)
@@ -721,9 +775,9 @@ SEXP get_ipaddr_vector (void)
 SEXP get_num_ip_pkts_sent_vector (void)
 {
 	struct ip_info_s *tmp;
-	char ip_addr_str [32];
+//	char ip_addr_str [32];
 	SEXP vec;
-	SEXP e;
+//	SEXP e;
  	int i;
 
 	vec = allocVector (REALSXP, num_ip_info_elements);
@@ -835,7 +889,7 @@ SEXP get_dst_port_vector (void)
 {
 	struct flow_s *tmp;
 	SEXP vec;
-	SEXP e;
+//	SEXP e;
 	uint32 i, n = 0;
 
 	vec = allocVector (REALSXP, cnt.num_tcp_flows);
@@ -853,8 +907,8 @@ SEXP get_dst_port_vector (void)
 SEXP get_flow_id_vector (void)
 {
 	struct flow_s *tmp;
-	SEXP vec;
-	SEXP e;
+	SEXP vec = NULL;
+//	SEXP e;
 	uint32 i, n = 0;
 
 	vec = allocVector (REALSXP, cnt.num_tcp_flows);
@@ -873,7 +927,7 @@ SEXP get_start_time_vector (void)
 {
 	struct flow_s *tmp;
 	SEXP vec;
-	SEXP e;
+//	SEXP e;
 	uint32 i, n = 0;
 
 	vec = allocVector (REALSXP, cnt.num_tcp_flows);
@@ -908,12 +962,13 @@ find_flow_by_id (uint32 flow_id)
 	
 }
 
+#if 0
 SEXP get_src_timestamps_vector (SEXP flow_id)
 {
 	int i; 
 	uint32 id = (unsigned int) REAL(flow_id)[0];
 	struct flow_s *flow;
-	SEXP vec;
+	SEXP vec = NULL;
 
 	flow = find_flow_by_id (id);
 	if (flow) {
@@ -930,7 +985,7 @@ SEXP get_dst_timestamps_vector (SEXP flow_id)
 	int i; 
 	uint32 id = (unsigned int) REAL(flow_id)[0];
 	struct flow_s *flow;
-	SEXP vec;
+	SEXP vec = NULL;
 
 	flow = find_flow_by_id (id);
 	if (flow) {
@@ -941,13 +996,81 @@ SEXP get_dst_timestamps_vector (SEXP flow_id)
 	} 
 	return vec;
 }
+#else
+SEXP get_src_timestamps_vector (SEXP flow_id)
+{
+    int i;
+    uint32 id = (unsigned int) REAL(flow_id)[0];
+    struct flow_s *flow;
+    uint64 base_ts = 0LL;
+    SEXP vec = NULL;
+
+    flow = find_flow_by_id (id);
+    if (flow) {
+        vec = allocVector (REALSXP, flow->num_pkts);
+
+        /* find first timestamp */
+        for (i = 0; i < flow->num_pkts; i++) {
+            if (flow->src_timestamps[i]) {
+                base_ts = flow->src_timestamps[i];
+                break;
+            }
+        }
+
+        for (i = 0; i < flow->num_pkts; i++) {
+            if (flow->src_timestamps[i]) {
+                //printf ("base_ts = %llu pkt_ts = %llu ts = %llu\n", 
+                //      base_ts, flow->src_timestamps[i], (flow->src_timestamps[i]-base_ts)/1000);
+                REAL(vec)[i] = (double)(flow->src_timestamps[i] - base_ts);
+            }
+            else {
+                REAL(vec)[i] = (double)flow->src_timestamps[i];
+            }
+        }
+    }
+    return vec;
+}
+
+SEXP get_dst_timestamps_vector (SEXP flow_id)
+{
+    uint32 id = (unsigned int) REAL(flow_id)[0];
+    uint64 base_ts = 0LL;
+    struct flow_s *flow;
+    SEXP vec = NULL;
+    int i;
+
+    flow = find_flow_by_id (id);
+    if (flow) {
+        /* find first timestamp */
+        for (i = 0; i < flow->num_pkts; i++) {
+            if (flow->src_timestamps[i]) {
+                base_ts = flow->src_timestamps[i];
+                break;
+            }
+        }
+        vec = allocVector (REALSXP, flow->num_pkts);
+        for (i = 0; i < flow->num_pkts; i++) {
+            if (flow->dst_timestamps[i]) {
+                REAL(vec)[i] = (double)(flow->dst_timestamps[i] - base_ts);
+            }
+            else {
+                REAL(vec)[i] = (double)(flow->dst_timestamps[i]);
+            }
+        }
+    }
+    return vec;
+}
+
+#endif
+
+
 
 SEXP get_src_ack_nums_vector (SEXP flow_id)
 {
 	int i; 
 	uint32 id = (unsigned int) REAL(flow_id)[0];
 	struct flow_s *flow;
-	SEXP vec;
+	SEXP vec = NULL;
 
 	flow = find_flow_by_id (id);
 	if (flow) {
@@ -964,7 +1087,7 @@ SEXP get_src_seq_nums_vector (SEXP flow_id)
 	int i; 
 	uint32 id = (unsigned int) REAL(flow_id)[0];
 	struct flow_s *flow;
-	SEXP vec;
+	SEXP vec = NULL;
 
 	flow = find_flow_by_id (id);
 	if (flow) {
@@ -981,7 +1104,7 @@ SEXP get_dst_ack_nums_vector (SEXP flow_id)
 	int i; 
 	uint32 id = (unsigned int) REAL(flow_id)[0];
 	struct flow_s *flow;
-	SEXP vec;
+	SEXP vec = NULL;
 
 	flow = find_flow_by_id (id);
 	if (flow) {
@@ -998,7 +1121,7 @@ SEXP get_dst_seq_nums_vector (SEXP flow_id)
 	int i; 
 	uint32 id = (unsigned int) REAL(flow_id)[0];
 	struct flow_s *flow;
-	SEXP vec;
+	SEXP vec = NULL;
 
 	flow = find_flow_by_id (id);
 	if (flow) {
@@ -1011,5 +1134,14 @@ SEXP get_dst_seq_nums_vector (SEXP flow_id)
 }
 
 
+#else
 
+int main (int argc, char *argv[])
+{
+    parse_pcap_file (argv[1], 1);
+}
+
+
+
+#endif
 
