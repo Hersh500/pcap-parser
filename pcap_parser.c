@@ -371,6 +371,7 @@ record_timestamp_and_seq_ack_nums (struct flow_s *flow, struct pcaprec_hdr_s *pk
 		if ((tcp_hdr->ofs_ctrl & 0x10) == 0x10) {
 			flow->src_ack_nums[flow->num_pkts] = tcp_hdr->ack_num;
 		}
+
 		flow->src_timestamps[flow->num_pkts] = (uint64)pkt_hdr->ts_sec * 1000000; 
 		if (pkt_hdr->ts_usec > 1000000) {
 			/* possibly nanosecond pcap file */
@@ -378,7 +379,7 @@ record_timestamp_and_seq_ack_nums (struct flow_s *flow, struct pcaprec_hdr_s *pk
 		}
 		else {
 			flow->src_timestamps[flow->num_pkts] += pkt_hdr->ts_usec;
-        }
+        	}
 	}
 }
 
